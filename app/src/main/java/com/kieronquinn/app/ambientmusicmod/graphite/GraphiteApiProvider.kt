@@ -56,6 +56,21 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
         const val METHOD_GET_RECOGNITION = "getRecognition"
         val URI_RECOGNITION: Uri = Uri.parse("content://$AUTHORITY/recognition")
 
+        /**
+         *  Announces every newly recognised song on [URI_STATE], so Graphite's lock screen line and
+         *  At a Glance card can follow it. Started from the Application once Koin is up.
+         */
+        fun watchRecognitions(context: android.content.Context) {
+            val repository = org.koin.java.KoinJavaComponent.get<RecognitionRepository>(
+                RecognitionRepository::class.java
+            )
+            MainScope().launch {
+                repository.getLatestRecognition().collect {
+                    context.contentResolver.notifyChange(URI_STATE, null)
+                }
+            }
+        }
+
         const val KEY_TYPE = "type"
         const val KEY_VALUE = "value"
         const val KEY_OPTIONS = "options"

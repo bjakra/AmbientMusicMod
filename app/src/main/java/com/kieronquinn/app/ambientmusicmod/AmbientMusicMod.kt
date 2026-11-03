@@ -253,6 +253,7 @@ class AmbientMusicMod: Application() {
         // AMM queued the update check when its screens opened; here they live in Graphite settings.
         com.kieronquinn.app.ambientmusicmod.graphite.GraphiteDatabaseUpdater.closeWindow()
         com.kieronquinn.app.ambientmusicmod.work.UpdateWorker.queueWorker(this)
+        com.kieronquinn.app.ambientmusicmod.graphite.GraphiteApiProvider.watchRecognitions(this)
     }
 
     private fun createMarkwon(): Markwon {
