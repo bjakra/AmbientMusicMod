@@ -19,6 +19,9 @@ import com.kieronquinn.app.ambientmusicmod.repositories.RemoteSettingsRepository
 import com.kieronquinn.app.ambientmusicmod.repositories.RemoteSettingsRepository.SettingsState
 import com.kieronquinn.app.ambientmusicmod.repositories.SettingsRepository
 import com.kieronquinn.app.ambientmusicmod.repositories.ShardsRepository
+import com.kieronquinn.app.ambientmusicmod.repositories.ShardsListRepository
+import com.kieronquinn.app.ambientmusicmod.repositories.BackupRestoreRepository
+import kotlinx.coroutines.withTimeoutOrNull
 import com.kieronquinn.app.pixelambientmusic.model.SettingsStateChange
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -56,6 +59,13 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
         const val METHOD_GET_RECOGNITION = "getRecognition"
         /** The song shown now (track, artist, endTime), empty when none; changes on .../song */
         const val METHOD_GET_SONG = "getSong"
+        const val METHOD_GET_TRACKS = "getTracks"
+        const val METHOD_BACKUP = "backup"
+        const val METHOD_RESTORE = "restore"
+        const val METHOD_GET_BACKUP = "getBackup"
+        const val METHOD_SET_BACKUP_FOLDER = "setBackupFolder"
+        val URI_BACKUP: Uri = Uri.parse("content://$AUTHORITY/backup")
+        private const val MAX_TRACKS = 300
         val URI_RECOGNITION: Uri = Uri.parse("content://$AUTHORITY/recognition")
 
         /**
@@ -149,6 +159,21 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
             METHOD_CANCEL_RECOGNITION -> { recognitionJob?.cancel(); null }
             METHOD_GET_RECOGNITION -> Bundle(recognition)
             METHOD_GET_SONG -> Bundle(GraphiteNowPlayingSong.current)
+            METHOD_GET_TRACKS -> getTracks(arg.orEmpty())
+            METHOD_BACKUP -> { startBackup(Uri.parse(arg ?: return@runBlocking null)); null }
+            METHOD_RESTORE -> {
+                startRestore(Uri.parse(arg ?: return@runBlocking null), extras ?: Bundle()); null
+            }
+            METHOD_GET_BACKUP -> Bundle(backup)
+            METHOD_SET_BACKUP_FOLDER -> {
+                val uri = Uri.parse(arg ?: return@runBlocking null)
+                val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                runCatching { context?.contentResolver?.takePersistableUriPermission(uri, flags) }
+                settings.periodicBackupUri.set(uri.toString())
+                notifyChanged()
+                null
+            }
             else -> null
         }
     }
@@ -254,6 +279,75 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
         deviceConfig.deviceCountry.notifyChange()
         notifyChanged()
         return Bundle()
+    }
+
+    private val shardsList by inject<ShardsListRepository>()
+    private val backupRestore by inject<BackupRestoreRepository>()
+    @Volatile private var backup = Bundle()
+
+    /**
+     *  AMM's track list ("songs in the database"): its cached list of every database song, searched
+     *  by title or artist. While AMM builds the cache, the progress is returned instead.
+     */
+    private suspend fun getTracks(search: String): Bundle = Bundle().apply {
+        val state = withTimeoutOrNull(3_000) {
+            shardsList.tracks.first { it is ShardsListRepository.GetState.Loaded }
+        } ?: shardsList.tracks.value
+        when (state) {
+            is ShardsListRepository.GetState.Loaded -> {
+                val matches = state.tracks.asSequence().filter {
+                    search.isBlank() || it.trackName.contains(search, true) || it.artist.contains(search, true)
+                }.sortedBy { it.trackName.lowercase() }.toList()
+                putInt("total", state.tracks.size)
+                putInt("matches", matches.size)
+                val shown = matches.take(MAX_TRACKS)
+                putStringArray("tracks", shown.map { it.trackName }.toTypedArray())
+                putStringArray("artists", shown.map { it.artist }.toTypedArray())
+            }
+            is ShardsListRepository.GetState.Loading -> {
+                putBoolean("loading", true)
+                putInt("current", state.current)
+                putInt("of", state.total)
+            }
+            else -> putBoolean("loading", true)
+        }
+    }
+
+    /** AMM's backup, to a file Graphite settings picked (and granted this app access to) */
+    private fun startBackup(uri: Uri) = scope.launch {
+        backupRestore.createBackup(uri).collect { state ->
+            backup = Bundle().apply {
+                putString("text", context?.getString(state.title))
+                if (state is BackupRestoreRepository.BackupState.BackupComplete) {
+                    putBoolean("finished", true)
+                    putBoolean("success", state.result == BackupRestoreRepository.BackupResult.SUCCESS)
+                }
+            }
+            context?.contentResolver?.notifyChange(URI_BACKUP, null)
+        }
+    }
+
+    /** AMM's restore with AMM's options (what to restore, what to clear first) */
+    private fun startRestore(uri: Uri, options: Bundle) = scope.launch {
+        val restoreOptions = BackupRestoreRepository.RestoreOptions(
+            restoreHistory = options.getBoolean("restoreHistory", true),
+            clearHistory = options.getBoolean("clearHistory", false),
+            clearLinear = options.getBoolean("clearLinear", false),
+            restoreLinear = options.getBoolean("restoreLinear", true),
+            restoreFavourites = options.getBoolean("restoreFavourites", true),
+            clearFavourites = options.getBoolean("clearFavourites", false),
+            restoreSettings = options.getBoolean("restoreSettings", true),
+        )
+        backupRestore.restoreBackup(uri, restoreOptions).collect { state ->
+            backup = Bundle().apply {
+                putString("text", context?.getString(state.title))
+                if (state is BackupRestoreRepository.RestoreState.RestoreComplete) {
+                    putBoolean("finished", true)
+                    putBoolean("success", state.result == BackupRestoreRepository.RestoreResult.SUCCESS)
+                }
+            }
+            context?.contentResolver?.notifyChange(URI_BACKUP, null)
+        }
     }
 
     /** The installed database (AMM's Updates screen), without asking the network */
