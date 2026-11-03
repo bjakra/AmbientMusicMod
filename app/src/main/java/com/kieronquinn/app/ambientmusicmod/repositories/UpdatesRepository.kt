@@ -101,25 +101,17 @@ class UpdatesRepositoryImpl(
         }catch (e: Exception){
             null
         }
-        getRelease(
-            localAsiInfo?.versionName,
-            localAsiInfo?.longVersionCode,
-            pamProvider,
-            "pam",
-            ignoreCache
-        )
+        // Graphite: the engine ships with the OS and is updated only by OS updates, and this app
+        // has no network to ask GitHub. Installed means up to date; missing can't be fixed here.
+        if(localAsiInfo == null) return@withContext UpdateState.FailedToFetchInitial
+        UpdateState.UpToDate(localAsiInfo.versionName ?: "", localAsiInfo.longVersionCode)
     }
 
     override suspend fun getAMMUpdateState(ignoreCache: Boolean): UpdateState = withContext(
         Dispatchers.IO
     ) {
-        getRelease(
-            BuildConfig.TAG_NAME,
-            BuildConfig.VERSION_CODE.toLong(),
-            ammProvider,
-            "amm",
-            ignoreCache
-        )
+        // Graphite: Graphite Now Playing is part of the OS, updated with it
+        UpdateState.UpToDate(BuildConfig.TAG_NAME, BuildConfig.VERSION_CODE.toLong())
     }
 
     override suspend fun isAnyUpdateAvailable(): Boolean {

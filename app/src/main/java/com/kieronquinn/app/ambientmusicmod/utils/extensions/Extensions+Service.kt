@@ -9,10 +9,13 @@ import com.kieronquinn.app.ambientmusicmod.components.notifications.Notification
 fun Service.startForeground(notificationId: NotificationId, notification: Notification) {
     try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Graphite: this process records itself (AMM's shell user did), and background
+            // microphone access needs a microphone type foreground service
             startForeground(
                 notificationId.ordinal,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             )
         }else{
             startForeground(notificationId.ordinal, notification)

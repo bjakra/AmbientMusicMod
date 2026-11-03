@@ -459,37 +459,18 @@ class ShizukuService: IShellProxy.Stub() {
         }
     }
 
-    override fun expediteJobs(jobs: IntArray, force: Boolean) {
-        jobs.forEach {
-            val command = if(force){
-                arrayOf("run", "-f", PACKAGE_NAME_PAM, it.toString())
-            }else{
-                arrayOf("run", PACKAGE_NAME_PAM, it.toString())
-            }
-            runJobSchedulerCommand(command)
-        }
-    }
-
     /**
-     *  Graphite: the same `cmd jobscheduler` command, sent straight to the jobscheduler service's
-     *  shell command interface. The service allows it for CHANGE_APP_IDLE_STATE, which this
-     *  privileged app holds; an app can't run the cmd binary as shell.
+     *  Graphite: AMM ran `cmd jobscheduler run [-f] <engine> <id>` as shell, which Android only
+     *  accepts from ADB. The engine reschedules its own jobs instead (ExpediteJobsReceiver in the
+     *  Graphite engine): without their delay and with their conditions, or without conditions when
+     *  forced, which is what `run` and `run -f` do.
      */
-    private fun runJobSchedulerCommand(args: Array<String>) = runWithClearedIdentity {
-        val binder = SystemServiceHelper.getSystemService("jobscheduler") ?: return@runWithClearedIdentity
-        java.io.FileInputStream("/dev/null").use { input ->
-            java.io.FileOutputStream("/dev/null").use { output ->
-                IBinder::class.java.getMethod(
-                    "shellCommand",
-                    java.io.FileDescriptor::class.java,
-                    java.io.FileDescriptor::class.java,
-                    java.io.FileDescriptor::class.java,
-                    Array<String>::class.java,
-                    Class.forName("android.os.ShellCallback"),
-                    ResultReceiver::class.java
-                ).invoke(binder, input.fd, output.fd, output.fd, args, null, ResultReceiver(null))
-            }
-        }
+    override fun expediteJobs(jobs: IntArray, force: Boolean) = runWithClearedIdentity {
+        val intent = android.content.Intent("org.graphite.nowplaying.EXPEDITE_JOBS")
+            .setPackage(PACKAGE_NAME_PAM)
+            .putExtra("jobs", jobs)
+            .putExtra("force", force)
+        context.sendBroadcast(intent)
     }
 
 

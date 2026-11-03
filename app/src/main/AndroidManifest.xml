@@ -19,6 +19,10 @@
     <uses-permission android:name="android.permission.CONTROL_KEYGUARD" />
     <uses-permission android:name="android.permission.FORCE_STOP_PACKAGES" />
     <uses-permission android:name="android.permission.CHANGE_APP_IDLE_STATE" />
+    <!-- Graphite: recording happens in this app's foreground service, started at boot: a microphone
+         type service, allowed to start from the background (an exemption Android grants this permission) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.START_ACTIVITIES_FROM_BACKGROUND" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
@@ -93,7 +97,7 @@
         </receiver>
 
         <service android:name=".service.AmbientMusicModForegroundService"
-            android:foregroundServiceType="specialUse" />
+            android:foregroundServiceType="specialUse|microphone" />
 
         <service
             android:name=".service.QuickSettingTileService"
