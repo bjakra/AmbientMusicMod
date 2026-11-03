@@ -64,7 +64,26 @@ class UpdateWorker(
         return Result.success()
     }
 
+    /**
+     *  Graphite: this app has no network, and the apps update with the OS. At the same time AMM
+     *  checked (12:00), an automatic update runs when it's on and the chosen interval has passed;
+     *  the downloader gets network only for it (GraphiteDatabaseUpdater). With automatic updates off
+     *  nothing connects, so there is no "update available" notification either.
+     */
     private suspend fun checkForUpdates() = withContext(Dispatchers.IO) {
+        val interval = settingsRepository.automaticMusicDatabaseUpdatesInterval.get()
+        val last = settingsRepository.lastMusicDatabaseUpdateCheck.get()
+        val due = System.currentTimeMillis() - last >=
+            java.time.Duration.ofDays(interval.days).minusHours(1).toMillis()
+        if(settingsRepository.automaticMusicDatabaseUpdates.get() && due){
+            settingsRepository.lastMusicDatabaseUpdateCheck.set(System.currentTimeMillis())
+            com.kieronquinn.app.ambientmusicmod.graphite.GraphiteDatabaseUpdater.scheduledUpdate()
+        }
+        queueWorker(context)
+    }
+
+    @Suppress("unused") // AMM's check, kept for reference: needs network this app doesn't have
+    private suspend fun checkForUpdatesAmm() = withContext(Dispatchers.IO) {
         val appUpdatesAvailable = updatesRepository.isAnyUpdateAvailable()
         val shardsUpdateAvailable = shardsRepository.isUpdateAvailable(true)
         if(appUpdatesAvailable || shardsUpdateAvailable){

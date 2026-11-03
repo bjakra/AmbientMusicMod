@@ -106,6 +106,15 @@ public class HttpGrpcBindableService extends HttpServiceGrpc.HttpServiceImplBase
       return;
     }
 
+    // Graphite: only the music database, only during an update the user asked for
+    if (!GraphiteNetworkGate.isAllowed(request.getUrl())) {
+      logger.atWarning().log("Graphite: refused request outside a music database update");
+      responseObserver.onError(
+          new IllegalArgumentException(
+              String.format("Refused outside a music database update: '%s'", request.getUrl())));
+      return;
+    }
+
     // Log Unrecognized requests
     if (!networkUsageLogRepository.isKnownConnection(ConnectionType.HTTP, request.getUrl())) {
       logger.atInfo().log("Network usage log unrecognised HTTPS request for %s", request.getUrl());

@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import com.kieronquinn.app.ambientmusicmod.repositories.RemoteSettingsRepository
 import com.kieronquinn.app.ambientmusicmod.repositories.RemoteSettingsRepository.SettingsState
 import com.kieronquinn.app.ambientmusicmod.repositories.SettingsRepository
+import com.kieronquinn.app.ambientmusicmod.repositories.ShardsRepository
 import com.kieronquinn.app.pixelambientmusic.model.SettingsStateChange
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -43,6 +44,8 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
         const val METHOD_SET_ENABLED = "setEnabled"
         const val METHOD_GET_SETTINGS = "getSettings"
         const val METHOD_SET_SETTING = "setSetting"
+        const val METHOD_UPDATE_DATABASE = "updateDatabase"
+        const val METHOD_GET_DATABASE = "getDatabase"
         const val METHOD_RECOGNISE = "recognise"
         const val METHOD_CANCEL_RECOGNITION = "cancelRecognition"
         const val METHOD_GET_RECOGNITION = "getRecognition"
@@ -69,6 +72,7 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
             "bedtimeModeStart" to settings.bedtimeModeStart,
             "bedtimeModeEnd" to settings.bedtimeModeEnd,
             "automaticMusicDatabaseUpdates" to settings.automaticMusicDatabaseUpdates,
+            "automaticMusicDatabaseUpdatesInterval" to settings.automaticMusicDatabaseUpdatesInterval,
             "periodicBackupEnabled" to settings.periodicBackupEnabled,
             "periodicBackupInterval" to settings.periodicBackupInterval,
             "lockscreenOverlayClicked" to settings.lockscreenOverlayClicked,
@@ -108,6 +112,8 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
                 notifyChanged()
                 null
             }
+            METHOD_UPDATE_DATABASE -> { GraphiteDatabaseUpdater.updateNow(); null }
+            METHOD_GET_DATABASE -> getDatabase()
             METHOD_RECOGNISE -> { startRecognition(); null }
             METHOD_CANCEL_RECOGNITION -> { recognitionJob?.cancel(); null }
             METHOD_GET_RECOGNITION -> Bundle(recognition)
@@ -176,6 +182,24 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
             SettingsState.NoPAM -> putString("state", "noEngine")
             SettingsState.NoShizuku -> putString("state", "noService")
             SettingsState.NotSetup -> putString("state", "notSetup")
+        }
+    }
+
+    private val shards by inject<ShardsRepository>()
+
+    /** The installed database (AMM's Updates screen), without asking the network */
+    private suspend fun getDatabase(): Bundle = Bundle().apply {
+        putBoolean("updating", GraphiteDatabaseUpdater.running.value)
+        runCatching { shards.getCurrentDownloads().first() }.getOrNull()?.let { putInt("downloads", it) }
+        val state = runCatching { shards.getShardsState(false).first() }.getOrNull() ?: return@apply
+        putInt("version", state.local.versionCode)
+        putString("date", state.local.date.toLocalDate().toString())
+        putInt("tracks", state.local.trackCount)
+        putInt("personalisedTracks", state.local.personalisedTrackCount)
+        putStringArray("countries", state.local.selectedCountries.map { it.name }.toTypedArray())
+        state.remote?.let {
+            putInt("remoteVersion", it.versionCode)
+            putString("remoteDate", it.date.toLocalDate().toString())
         }
     }
 

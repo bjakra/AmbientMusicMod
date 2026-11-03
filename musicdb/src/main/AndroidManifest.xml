@@ -6,6 +6,15 @@
     <application
         android:name=".MusicDbApplication"
         android:allowBackup="false"
-        android:label="Now Playing database" />
+        android:label="Now Playing database">
+
+        <!-- The newest database list for Graphite Now Playing, fetched only during an update window -->
+        <provider
+            android:name=".ManifestProvider"
+            android:authorities="org.graphite.musicdb.manifest"
+            android:exported="true"
+            android:permission="org.graphite.nowplaying.ACCESS_SERVICE" />
+
+    </application>
 
 </manifest>

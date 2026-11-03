@@ -40,6 +40,10 @@ interface SettingsRepository {
     val bedtimeModeEnd: AmbientMusicModSetting<Long>
 
     val automaticMusicDatabaseUpdates: AmbientMusicModSetting<Boolean>
+    /** Graphite: how often automatic updates check (AMM: daily) */
+    val automaticMusicDatabaseUpdatesInterval: AmbientMusicModSetting<DatabaseUpdateInterval>
+    /** Graphite: when the last automatic check ran */
+    val lastMusicDatabaseUpdateCheck: AmbientMusicModSetting<Long>
 
     val hasSetNotificationPermission: AmbientMusicModSetting<Boolean>
     val hasSetAccessibilityPermission: AmbientMusicModSetting<Boolean>
@@ -101,6 +105,12 @@ interface SettingsRepository {
             R.string.settings_recognition_period_5_minutes,
             R.string.settings_recognition_period_5_minutes_content
         )
+    }
+
+    enum class DatabaseUpdateInterval(val days: Long, @StringRes val title: Int) {
+        DAILY(1, R.string.graphite_database_update_daily),
+        WEEKLY(7, R.string.graphite_database_update_weekly),
+        MONTHLY(30, R.string.graphite_database_update_monthly)
     }
 
     enum class RecognitionBuffer(val time: Long, @StringRes val title: Int) {
@@ -305,6 +315,12 @@ class SettingsRepositoryImpl(
     override val automaticMusicDatabaseUpdates = boolean(
         AUTOMATIC_MUSIC_DATABASE_UPDATES, DEFAULT_AUTOMATIC_MUSIC_DATABASE_UPDATES
     )
+
+    override val automaticMusicDatabaseUpdatesInterval = enum(
+        "graphite_database_update_interval", SettingsRepository.DatabaseUpdateInterval.WEEKLY
+    )
+
+    override val lastMusicDatabaseUpdateCheck = long("graphite_last_database_update_check", 0L)
 
     override val hasSetNotificationPermission = boolean(
         HAS_SET_NOTIFICATION_PERMISSION, DEFAULT_HAS_SET_NOTIFICATION_PERMISSION

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Graphite additions -->
+<resources>
+    <string name="graphite_database_update_daily">Daily</string>
+    <string name="graphite_database_update_weekly">Weekly</string>
+    <string name="graphite_database_update_monthly">Monthly</string>
+</resources>

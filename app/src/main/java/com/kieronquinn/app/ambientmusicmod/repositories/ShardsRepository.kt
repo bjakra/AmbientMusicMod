@@ -262,7 +262,8 @@ class ShardsRepositoryImpl(
     private fun getRemoteShards(ignoreCache: Boolean) = flow {
         val shards = try {
             val cached = if(ignoreCache) null else getShardsCache()
-            cached ?: shardsProvider.getCompatibleShardsManifest().execute().body()?.also {
+            // Graphite: the same file, fetched by org.graphite.musicdb (this app has no network)
+            cached ?: fetchManifestViaMusicDb()?.also {
                 it.cacheManifest()
             }
         }catch (e: Exception){
@@ -278,6 +279,18 @@ class ShardsRepositoryImpl(
             shards.url
         ))
     }.flowOn(Dispatchers.IO)
+
+    /**
+     *  Graphite: AMM's ShardsProvider (Retrofit, raw.githubusercontent.com) read through the
+     *  downloader app, the only Now Playing part with network, which only answers during an update.
+     */
+    private fun fetchManifestViaMusicDb(): ShardManifest? {
+        val file = if (isArmv7) "release.json" else "release_v3.json"
+        val body = context.contentResolver.call(
+            android.net.Uri.parse("content://org.graphite.musicdb.manifest"), "fetch", file, null
+        )?.getString("body") ?: return null
+        return gson.fromJson(body, ShardManifest::class.java)
+    }
 
     private fun ShardsProvider.getCompatibleShardsManifest(): Call<ShardManifest> {
         return if (isArmv7) {

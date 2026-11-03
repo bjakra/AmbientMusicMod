@@ -249,6 +249,10 @@ class AmbientMusicMod: Application() {
         super.onCreate()
         DynamicColors.applyToActivitiesIfAvailable(this)
         setupMonet()
+        // Graphite: no update runs in a fresh process, so the downloader must have no network.
+        // AMM queued the update check when its screens opened; here they live in Graphite settings.
+        com.kieronquinn.app.ambientmusicmod.graphite.GraphiteDatabaseUpdater.closeWindow()
+        com.kieronquinn.app.ambientmusicmod.work.UpdateWorker.queueWorker(this)
     }
 
     private fun createMarkwon(): Markwon {
