@@ -281,7 +281,16 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
         return Bundle()
     }
 
-    private val shardsList by inject<ShardsListRepository>()
+    // AMM creates this repository in its track list screen's Koin scope; the same scoped
+    // definition is used here through a scope of that type kept for the provider's lifetime
+    private val shardsList: ShardsListRepository by lazy {
+        getKoin().getOrCreateScope(
+            "graphite_tracklist",
+            org.koin.core.qualifier.TypeQualifier(
+                com.kieronquinn.app.ambientmusicmod.ui.screens.tracklist.TracklistViewModel::class
+            )
+        ).get()
+    }
     private val backupRestore by inject<BackupRestoreRepository>()
     @Volatile private var backup = Bundle()
 
