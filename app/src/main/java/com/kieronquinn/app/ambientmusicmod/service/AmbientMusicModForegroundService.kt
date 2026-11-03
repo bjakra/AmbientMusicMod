@@ -205,7 +205,8 @@ class AmbientMusicModForegroundService: LifecycleService() {
 
     private val overlayState = combine(
         recognitionState,
-        accessibility.enabled,
+        // Graphite: Graphite's "show on lock screen" setting instead of AMM's accessibility overlay
+        settings.graphiteShowSong.asFlow(),
         settings.lockscreenOverlayStyle.asFlow(),
         settings.lockscreenOverlayYPos.asFlow(),
         onDemandLockscreenEnabled
@@ -407,6 +408,9 @@ class AmbientMusicModForegroundService: LifecycleService() {
             }else 0
             delay(delay)
             LockscreenOverlayAccessibilityService.sendState(clearTo)
+            com.kieronquinn.app.ambientmusicmod.graphite.GraphiteNowPlayingSong.publish(
+                this@AmbientMusicModForegroundService, clearTo
+            )
         }
     }
 
@@ -414,6 +418,9 @@ class AmbientMusicModForegroundService: LifecycleService() {
         overlayState.collect { state ->
             log(state.toString())
             LockscreenOverlayAccessibilityService.sendState(state)
+            com.kieronquinn.app.ambientmusicmod.graphite.GraphiteNowPlayingSong.publish(
+                this@AmbientMusicModForegroundService, state
+            )
         }
     }
 

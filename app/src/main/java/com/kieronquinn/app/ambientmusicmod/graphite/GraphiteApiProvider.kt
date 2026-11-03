@@ -54,6 +54,8 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
         const val METHOD_RECOGNISE = "recognise"
         const val METHOD_CANCEL_RECOGNITION = "cancelRecognition"
         const val METHOD_GET_RECOGNITION = "getRecognition"
+        /** The song shown now (track, artist, endTime), empty when none; changes on .../song */
+        const val METHOD_GET_SONG = "getSong"
         val URI_RECOGNITION: Uri = Uri.parse("content://$AUTHORITY/recognition")
 
         /**
@@ -96,6 +98,7 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
             "periodicBackupEnabled" to settings.periodicBackupEnabled,
             "periodicBackupInterval" to settings.periodicBackupInterval,
             "lockscreenOverlayClicked" to settings.lockscreenOverlayClicked,
+            "graphiteShowSong" to settings.graphiteShowSong,
             "superpacksRequireWiFi" to deviceConfig.superpacksRequireWiFi,
             "superpacksRequireCharging" to deviceConfig.superpacksRequireCharging,
             "deviceCountry" to deviceConfig.deviceCountry,
@@ -145,6 +148,7 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
             METHOD_RECOGNISE -> { startRecognition(); null }
             METHOD_CANCEL_RECOGNITION -> { recognitionJob?.cancel(); null }
             METHOD_GET_RECOGNITION -> Bundle(recognition)
+            METHOD_GET_SONG -> Bundle(GraphiteNowPlayingSong.current)
             else -> null
         }
     }

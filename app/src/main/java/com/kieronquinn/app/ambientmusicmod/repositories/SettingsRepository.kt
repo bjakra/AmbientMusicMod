@@ -44,6 +44,8 @@ interface SettingsRepository {
     val automaticMusicDatabaseUpdatesInterval: AmbientMusicModSetting<DatabaseUpdateInterval>
     /** Graphite: when the last automatic check ran */
     val lastMusicDatabaseUpdateCheck: AmbientMusicModSetting<Long>
+    /** Graphite: show the recognised song on the lock screen and At a Glance (AMM: its accessibility overlay) */
+    val graphiteShowSong: AmbientMusicModSetting<Boolean>
 
     val hasSetNotificationPermission: AmbientMusicModSetting<Boolean>
     val hasSetAccessibilityPermission: AmbientMusicModSetting<Boolean>
@@ -321,6 +323,8 @@ class SettingsRepositoryImpl(
     )
 
     override val lastMusicDatabaseUpdateCheck = long("graphite_last_database_update_check", 0L)
+
+    override val graphiteShowSong = boolean("graphite_show_song", true)
 
     override val hasSetNotificationPermission = boolean(
         HAS_SET_NOTIFICATION_PERMISSION, DEFAULT_HAS_SET_NOTIFICATION_PERMISSION
