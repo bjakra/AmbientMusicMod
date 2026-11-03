@@ -227,7 +227,10 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
             context?.getString(country.countryName) ?: country.code
         }.toTypedArray())
         putString("country", deviceConfig.deviceCountry.get())
-        putString("primary", deviceConfig.getPrimaryLanguage())
+        // As AMM's country entry: some countries have several codes ("us,xa"), the region gives one
+        putString("primary", runCatching {
+            ShardsRepository.ShardCountry.forCode(deviceConfig.getPrimaryLanguage()).code
+        }.getOrDefault(deviceConfig.getPrimaryLanguage()))
         putStringArray("extras", extraCountries().map { it.code }.toTypedArray())
     }
 
