@@ -7,6 +7,14 @@ import android.net.Uri
 import android.os.Bundle
 import com.kieronquinn.app.ambientmusicmod.repositories.BaseSettingsRepository.AmbientMusicModSetting
 import com.kieronquinn.app.ambientmusicmod.repositories.DeviceConfigRepository
+import com.kieronquinn.app.ambientmusicmod.repositories.RecognitionRepository
+import com.kieronquinn.app.ambientmusicmod.repositories.RecognitionRepository.RecognitionState
+import com.kieronquinn.app.ambientmusicmod.repositories.WidgetRepository
+import com.kieronquinn.app.ambientmusicmod.service.AmbientMusicModForegroundService
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import com.kieronquinn.app.ambientmusicmod.repositories.RemoteSettingsRepository
 import com.kieronquinn.app.ambientmusicmod.repositories.RemoteSettingsRepository.SettingsState
 import com.kieronquinn.app.ambientmusicmod.repositories.SettingsRepository
@@ -35,6 +43,10 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
         const val METHOD_SET_ENABLED = "setEnabled"
         const val METHOD_GET_SETTINGS = "getSettings"
         const val METHOD_SET_SETTING = "setSetting"
+        const val METHOD_RECOGNISE = "recognise"
+        const val METHOD_CANCEL_RECOGNITION = "cancelRecognition"
+        const val METHOD_GET_RECOGNITION = "getRecognition"
+        val URI_RECOGNITION: Uri = Uri.parse("content://$AUTHORITY/recognition")
 
         const val KEY_TYPE = "type"
         const val KEY_VALUE = "value"
@@ -96,7 +108,55 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
                 notifyChanged()
                 null
             }
+            METHOD_RECOGNISE -> { startRecognition(); null }
+            METHOD_CANCEL_RECOGNITION -> { recognitionJob?.cancel(); null }
+            METHOD_GET_RECOGNITION -> Bundle(recognition)
             else -> null
+        }
+    }
+
+    private val recognitionRepository by inject<RecognitionRepository>()
+    private val widgetRepository by inject<WidgetRepository>()
+    private val scope = MainScope()
+    private var recognitionJob: Job? = null
+    @Volatile private var recognition = Bundle()
+
+    /**
+     *  "Recognise now", as AMM's recognition screen did for the on-device engine: the same request,
+     *  the widget is told about every state and a recognised song goes to the service (lock screen,
+     *  notification). Graphite's page can't play the recording back, so no audio is kept with it.
+     */
+    private fun startRecognition() {
+        recognitionJob?.cancel()
+        recognitionJob = scope.launch {
+            recognitionRepository.requestRecognition(false).collect { state ->
+                widgetRepository.notifyRecognitionState(state)
+                recognition = Bundle().apply {
+                    when (state) {
+                        is RecognitionState.Recording -> putString("phase", "recording")
+                        is RecognitionState.Recognising -> putString("phase", "recognising")
+                        is RecognitionState.Recognised -> {
+                            AmbientMusicModForegroundService.sendManualRecognition(state)
+                            putString("phase", "recognised")
+                            putString("track", state.recognitionResult.trackName)
+                            putString("artist", state.recognitionResult.artist)
+                        }
+                        is RecognitionState.Failed -> {
+                            putString("phase", "failed")
+                            putString("reason", state.recognitionFailure.failureReason.javaClass.simpleName)
+                        }
+                        is RecognitionState.Error -> {
+                            putString("phase", "error")
+                            putString("reason", state.errorReason.name)
+                        }
+                    }
+                }
+                context?.contentResolver?.notifyChange(URI_RECOGNITION, null)
+                if (state is RecognitionState.Recognised || state is RecognitionState.Failed ||
+                    state is RecognitionState.Error) {
+                    cancel()
+                }
+            }
         }
     }
 
