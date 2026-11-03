@@ -96,6 +96,13 @@
             </intent-filter>
         </receiver>
 
+        <!-- Graphite: the interface Graphite settings' Now Playing page uses -->
+        <provider
+            android:name=".graphite.GraphiteApiProvider"
+            android:authorities="org.graphite.nowplaying.api"
+            android:exported="true"
+            android:permission="org.graphite.nowplaying.ACCESS_SERVICE" />
+
         <service android:name=".service.AmbientMusicModForegroundService"
             android:foregroundServiceType="specialUse|microphone" />
 
