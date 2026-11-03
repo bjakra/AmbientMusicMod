@@ -13,7 +13,8 @@ plugins {
 apply plugin: 'com.google.android.gms.oss-licenses-plugin'
 
 String DEFAULT_MANIFEST = "290:https://storage.googleapis.com/music-iq-db/updatable_ytm_db/20240901-030029/manifest.json"
-String DEFAULT_MANIFEST_V3 = "3099:https://storage.googleapis.com/music-iq-db/updatable_db_v3/20240901-030029/manifest.json"
+// Graphite: the ROM build passes the newest database (-PgraphiteManifestV3=…), so a new install starts current
+String DEFAULT_MANIFEST_V3 = project.findProperty("graphiteManifestV3") ?: "3099:https://storage.googleapis.com/music-iq-db/updatable_db_v3/20240901-030029/manifest.json"
 
 def tagName = '2.4'
 def version = 240
