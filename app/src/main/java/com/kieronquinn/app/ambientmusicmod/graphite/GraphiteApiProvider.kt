@@ -133,6 +133,8 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
                 // Graphite settings replaces AMM's setup, so turning it on counts as set up
                 if (enabled) settings.hasSeenSetup.set(true)
                 remoteSettings.commitChanges(SettingsStateChange(mainEnabled = enabled))
+                // AMM started its service from its own screens (and at boot); start it now
+                context?.let { runCatching { AmbientMusicModForegroundService.start(it, true) } }
                 notifyChanged()
                 null
             }
