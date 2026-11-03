@@ -3,21 +3,27 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <permission
-        android:name="com.kieronquinn.app.ambientmusicmod.ACCESS_SERVICE"
+        android:name="org.graphite.nowplaying.ACCESS_SERVICE"
         android:icon="@drawable/ic_fab_recognise"
         android:label="@string/permission_label"
         android:protectionLevel="signature" />
 
-    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Graphite: no INTERNET. The song database is downloaded by org.graphite.musicdb, only when the user asks. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Graphite: what Shizuku's shell user provided, held directly by this privileged system app -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAPTURE_AUDIO_HOTWORD" />
+    <uses-permission android:name="android.permission.OBSERVE_SENSOR_PRIVACY" />
+    <uses-permission android:name="android.permission.CONTROL_KEYGUARD" />
+    <uses-permission android:name="android.permission.FORCE_STOP_PACKAGES" />
+    <uses-permission android:name="android.permission.CHANGE_APP_IDLE_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="com.kieronquinn.app.ambientmusicmod.ACCESS_SERVICE" />
+    <uses-permission android:name="org.graphite.nowplaying.ACCESS_SERVICE" />
     <uses-permission android:name="com.kieronquinn.app.pixelambientmusic.ACCESS_SERVICE" />
 
     <application
@@ -36,11 +42,7 @@
         <activity
             android:name=".ui.activities.MainActivity"
             android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
+            <!-- Graphite: no launcher entry; Now Playing is set up in Graphite settings -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -107,19 +109,11 @@
         <service
             android:name=".service.ShellProxyService"
             android:exported="true"
-            android:permission="com.kieronquinn.app.ambientmusicmod.ACCESS_SERVICE">
+            android:permission="org.graphite.nowplaying.ACCESS_SERVICE">
             <intent-filter>
-                <action android:name="com.kieronquinn.app.ambientmusicmod.SHELL_PROXY" />
+                <action android:name="org.graphite.nowplaying.SHELL_PROXY" />
             </intent-filter>
         </service>
-
-        <provider
-            android:name="rikka.shizuku.ShizukuProvider"
-            android:authorities="${applicationId}.shizuku"
-            android:enabled="true"
-            android:exported="true"
-            android:multiprocess="false"
-            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -135,7 +129,7 @@
             android:name=".providers.SettingsProvider"
             android:authorities="${applicationId}.settings"
             android:exported="true"
-            android:permission="com.kieronquinn.app.ambientmusicmod.ACCESS_SERVICE" />
+            android:permission="org.graphite.nowplaying.ACCESS_SERVICE" />
 
         <service
             android:name=".service.LockscreenOverlayAccessibilityService"
@@ -213,7 +207,7 @@
             android:name=".providers.AlbumArtProvider"
             android:authorities="${applicationId}.albumart"
             android:exported="true"
-            android:permission="com.kieronquinn.app.ambientmusicmod.ACCESS_SERVICE" />
+            android:permission="org.graphite.nowplaying.ACCESS_SERVICE" />
 
         <activity
             android:name="com.google.android.gms.oss.licenses.OssLicensesMenuActivity"

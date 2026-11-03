@@ -8,7 +8,7 @@
 
         <service android:name="com.google.android.as.oss.grpc.AstreaGrpcService"
             android:exported="true"
-            android:permission="com.kieronquinn.app.ambientmusicmod.ACCESS_SERVICE">
+            android:permission="org.graphite.nowplaying.ACCESS_SERVICE">
             <intent-filter>
                 <action android:name="grpc.io.action.BIND"/>
             </intent-filter>

@@ -40,7 +40,7 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId "com.kieronquinn.app.ambientmusicmod"
+        applicationId "org.graphite.nowplaying"
         minSdk 28
         targetSdk 35
         versionCode version
@@ -169,14 +169,13 @@ dependencies {
     compileOnly project(path: ':systemstubs')
 
     //Astrea service for downloading Superpacks
-    implementation project(path: ':astrea')
+    // Graphite: Astrea (network) lives in :musicdb, not in the core
 
     //Bypass hidden API restrictions
     implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:4.3'
 
     //Shizuku for Shell service
     implementation "dev.rikka.shizuku:api:$shizuku_version"
-    implementation "dev.rikka.shizuku:provider:$shizuku_version"
     implementation "dev.rikka.tools.refine:runtime:$refine_version"
 
     //Dagger + Hilt for injection in Astrea

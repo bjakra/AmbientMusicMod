@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Graphite: no activities, no launcher icon. INTERNET comes from the astrea module and is a runtime permission on
+     GrapheneOS, revoked except during a database update. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:name=".MusicDbApplication"
+        android:allowBackup="false"
+        android:label="Now Playing database" />
+
+</manifest>

@@ -57,9 +57,11 @@ class ShizukuService: IShellProxy.Stub() {
         getActivityThreadContext()
     }
 
+    // Graphite: runs inside Graphite Now Playing (platform signed priv-app), which holds the
+    // permission itself, instead of as the shell user through Shizuku
     private fun doesShellHavePermission(): Boolean {
         return context.packageManager.isPermissionGranted(
-            SHELL_PACKAGE, "android.permission.CAPTURE_AUDIO_HOTWORD"
+            context.packageName, "android.permission.CAPTURE_AUDIO_HOTWORD"
         )
     }
 
@@ -203,7 +205,9 @@ class ShizukuService: IShellProxy.Stub() {
         sessionId: Int,
         bufferSizeInBytes: Int
     ): AudioRecord {
-        val shellContext = ShellContext(context, isRoot)
+        // Graphite: recorded as this app, which has RECORD_AUDIO + CAPTURE_AUDIO_HOTWORD, rather
+        // than through a context pretending to be the shell package
+        val shellContext = context
         return AudioRecord::class.java.getDeclaredConstructor(
             AudioAttributes::class.java, //attributes
             AudioFormat::class.java, // format
@@ -226,7 +230,7 @@ class ShizukuService: IShellProxy.Stub() {
         sessionId: Int,
         bufferSizeInBytes: Int
     ): AudioRecord {
-        val shellContext = ShellContext(context, isRoot)
+        val shellContext = context
         return AudioRecord::class.java.getDeclaredConstructor(
             AudioAttributes::class.java, //attributes
             AudioFormat::class.java, // format
@@ -390,8 +394,9 @@ class ShizukuService: IShellProxy.Stub() {
     }
 
     override fun destroy() {
+        // Graphite: in AMM this ended the separate Shizuku process. Here it is the app's own
+        // process, so only the scope is cancelled.
         scope.cancel()
-        exitProcess(0)
     }
 
     override fun getSystemUIPackageName(): String {
@@ -417,8 +422,12 @@ class ShizukuService: IShellProxy.Stub() {
         runCommand("settings put secure aod_display_text \"$info\"")
     }
 
-    override fun forceStopNowPlaying() {
-        runCommand("am force-stop $PACKAGE_NAME_PAM")
+    override fun forceStopNowPlaying() = runWithClearedIdentity {
+        // Graphite: the API `am force-stop` calls (FORCE_STOP_PACKAGES), instead of running am
+        val activityManager = context.getSystemService(android.app.ActivityManager::class.java)
+        android.app.ActivityManager::class.java.getMethod("forceStopPackage", String::class.java)
+            .invoke(activityManager, PACKAGE_NAME_PAM)
+        Unit
     }
 
     private fun runCommand(command: String){
@@ -433,16 +442,12 @@ class ShizukuService: IShellProxy.Stub() {
     }
 
     private fun grantNotificationPermission() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        runCommand("pm grant ${BuildConfig.APPLICATION_ID} $POST_NOTIFICATIONS")
-        runCommand("pm grant $PACKAGE_NAME_PAM $POST_NOTIFICATIONS")
+        // Graphite: granted by the ROM's default permissions
     }
 
     @SuppressLint("UnsafeOptInUsageError")
     private fun grantAccessibilityPermission() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        //Grant the Restricted Settings AppOps permission, required to enable accessibility on A13
-        runCommand("appops set ${BuildConfig.APPLICATION_ID} ACCESS_RESTRICTED_SETTINGS allow")
+        // Graphite: no accessibility service, the lock screen line is drawn by SystemUI
     }
 
     override fun onCreate(config: Bundle) {
@@ -457,20 +462,37 @@ class ShizukuService: IShellProxy.Stub() {
     override fun expediteJobs(jobs: IntArray, force: Boolean) {
         jobs.forEach {
             val command = if(force){
-                "cmd jobscheduler run -f $PACKAGE_NAME_PAM $it"
+                arrayOf("run", "-f", PACKAGE_NAME_PAM, it.toString())
             }else{
-                "cmd jobscheduler run $PACKAGE_NAME_PAM $it"
+                arrayOf("run", PACKAGE_NAME_PAM, it.toString())
             }
-            runCommand(command)
+            runJobSchedulerCommand(command)
         }
     }
 
-    private fun grantRestrictedSettings() {
-        runCommand("cmd appops set ${BuildConfig.APPLICATION_ID} ACCESS_RESTRICTED_SETTINGS allow")
+    /**
+     *  Graphite: the same `cmd jobscheduler` command, sent straight to the jobscheduler service's
+     *  shell command interface. The service allows it for CHANGE_APP_IDLE_STATE, which this
+     *  privileged app holds; an app can't run the cmd binary as shell.
+     */
+    private fun runJobSchedulerCommand(args: Array<String>) = runWithClearedIdentity {
+        val binder = SystemServiceHelper.getSystemService("jobscheduler") ?: return@runWithClearedIdentity
+        java.io.FileInputStream("/dev/null").use { input ->
+            java.io.FileOutputStream("/dev/null").use { output ->
+                IBinder::class.java.getMethod(
+                    "shellCommand",
+                    java.io.FileDescriptor::class.java,
+                    java.io.FileDescriptor::class.java,
+                    java.io.FileDescriptor::class.java,
+                    Array<String>::class.java,
+                    Class.forName("android.os.ShellCallback"),
+                    ResultReceiver::class.java
+                ).invoke(binder, input.fd, output.fd, output.fd, args, null, ResultReceiver(null))
+            }
+        }
     }
 
-    init {
-        grantRestrictedSettings()
-    }
+
+    // Graphite: no grantRestrictedSettings() at start, there is no accessibility service to allow
 
 }

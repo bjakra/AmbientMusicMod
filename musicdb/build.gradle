@@ -1,0 +1,61 @@
+// Graphite: the music database downloader. Hosts AMM's Astrea module (Google's open source Private Compute
+// Services network service), through which the Now Playing engine downloads its song database. It is the only
+// Now Playing component with INTERNET, which Graphite settings grants just for an update the user asked for.
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'kotlin-kapt'
+    id 'dagger.hilt.android.plugin'
+}
+
+def getKeystoreProperties() {
+    def properties = new Properties()
+    def propertiesFile = rootProject.file("local.properties")
+    if (!propertiesFile.exists()) return null
+    properties.load(propertiesFile.newDataInputStream())
+    return properties
+}
+
+android {
+    compileSdk 35
+    namespace 'org.graphite.musicdb'
+    defaultConfig {
+        applicationId "org.graphite.musicdb"
+        minSdk 28
+        targetSdk 35
+        versionCode 1
+        versionName "1.0"
+    }
+    signingConfigs {
+        release {
+            def keystore = getKeystoreProperties()
+            if (keystore != null) {
+                storeFile file(keystore.getProperty("storeFile"))
+                storePassword keystore.getProperty("storePassword")
+                keyAlias keystore.getProperty("keyAlias")
+                keyPassword keystore.getProperty("keyPassword")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = 17
+    }
+}
+
+dependencies {
+    implementation project(path: ':astrea')
+    implementation "com.google.dagger:hilt-android:2.50"
+    implementation 'com.google.dagger:dagger:2.50'
+    kapt 'com.google.dagger:dagger-compiler:2.50'
+    kapt "com.google.dagger:hilt-compiler:2.50"
+}
