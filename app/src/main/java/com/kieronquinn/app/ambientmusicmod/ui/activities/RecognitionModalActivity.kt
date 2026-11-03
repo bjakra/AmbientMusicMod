@@ -19,6 +19,12 @@ class RecognitionModalActivity: MonetCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Graphite: Recognise now lives in Graphite settings' Now Playing page
+        if(com.kieronquinn.app.ambientmusicmod.graphite.GraphiteSettingsLink.open(this, recognise = true)) {
+            AmbientMusicModForegroundService.start(this, true)
+            finish()
+            return
+        }
         if(!settingsRepository.hasSeenSetup.getSync()){
             startActivity(Intent(this, MainActivity::class.java))
             finish()

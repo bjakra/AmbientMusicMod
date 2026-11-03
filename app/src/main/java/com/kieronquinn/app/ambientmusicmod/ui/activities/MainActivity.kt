@@ -35,6 +35,12 @@ class MainActivity: MonetCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Graphite: Now Playing is set up in Graphite settings, not here
+        if(com.kieronquinn.app.ambientmusicmod.graphite.GraphiteSettingsLink.open(this)) {
+            super.onCreate(savedInstanceState)
+            finish()
+            return
+        }
         installSplashScreen()
         super.onCreate(savedInstanceState)
         if(!intent.getBooleanExtra(EXTRA_SKIP_SPLASH, false)) {
