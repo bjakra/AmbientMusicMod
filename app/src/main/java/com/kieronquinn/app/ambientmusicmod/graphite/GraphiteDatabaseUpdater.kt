@@ -40,7 +40,8 @@ object GraphiteDatabaseUpdater : KoinComponent {
 
     private const val MANUAL_WINDOW = 60 * 60 * 1000L
     private const val SCHEDULED_WINDOW = 6 * 60 * 60 * 1000L
-    private const val DOWNLOAD_START_TIMEOUT = 2 * 60 * 1000L
+    /** Longest wait for countries to arrive when the version doesn't change */
+    private const val DOWNLOAD_START_TIMEOUT = 20 * 60 * 1000L
 
     private val context by inject<Context>()
     private val shards by inject<ShardsRepository>()
@@ -85,8 +86,17 @@ object GraphiteDatabaseUpdater : KoinComponent {
                         delay(10_000)
                     }
                 } else {
-                    // Already current: only give the engine time to fetch anything it's missing
-                    delay(DOWNLOAD_START_TIMEOUT)
+                    // Same version: done when every chosen country is installed (a country change
+                    // downloads that country's songs); give the engine a moment to register them
+                    delay(10_000)
+                    val wanted = (listOf(deviceConfig.getPrimaryLanguage()) + deviceConfig.getExtraLanguages())
+                        .map { ShardsRepository.ShardCountry.forCode(it) }.toSet()
+                    withTimeoutOrNull(DOWNLOAD_START_TIMEOUT) {
+                        while (!shards.getShardsState(false).first().local.selectedCountries
+                                .containsAll(wanted)) {
+                            delay(10_000)
+                        }
+                    } ?: Log.w(TAG, "Not all countries arrived in time: $wanted")
                 }
             }
         } catch (e: Exception) {

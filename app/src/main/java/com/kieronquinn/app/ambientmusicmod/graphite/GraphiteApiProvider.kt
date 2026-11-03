@@ -46,6 +46,11 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
         const val METHOD_SET_SETTING = "setSetting"
         const val METHOD_UPDATE_DATABASE = "updateDatabase"
         const val METHOD_GET_DATABASE = "getDatabase"
+        const val METHOD_GET_COUNTRIES = "getCountries"
+        const val METHOD_SET_COUNTRY = "setCountry"
+        const val METHOD_SET_EXTRA_COUNTRIES = "setExtraCountries"
+        /** AMM's MAX_EXTRA_LANGUAGE_LIMIT */
+        private const val MAX_EXTRA_COUNTRIES = 2
         const val METHOD_RECOGNISE = "recognise"
         const val METHOD_CANCEL_RECOGNITION = "cancelRecognition"
         const val METHOD_GET_RECOGNITION = "getRecognition"
@@ -113,6 +118,14 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
                 null
             }
             METHOD_UPDATE_DATABASE -> { GraphiteDatabaseUpdater.updateNow(); null }
+            METHOD_GET_COUNTRIES -> getCountries()
+            METHOD_SET_COUNTRY -> {
+                deviceConfig.deviceCountry.set(arg.orEmpty())
+                notifyChanged()
+                null
+            }
+            METHOD_SET_EXTRA_COUNTRIES ->
+                setExtraCountries(extras?.getStringArray(KEY_VALUE)?.filterNotNull().orEmpty())
             METHOD_GET_DATABASE -> getDatabase()
             METHOD_RECOGNISE -> { startRecognition(); null }
             METHOD_CANCEL_RECOGNITION -> { recognitionJob?.cancel(); null }
@@ -186,6 +199,40 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
     }
 
     private val shards by inject<ShardsRepository>()
+
+    /** AMM's country pickers: every database country, the chosen one (empty: automatic), extras */
+    private suspend fun getCountries(): Bundle = Bundle().apply {
+        val all = ShardsRepository.ShardCountry.values()
+        putStringArray("codes", all.map { it.code }.toTypedArray())
+        putStringArray("names", all.map { country ->
+            context?.getString(country.countryName) ?: country.code
+        }.toTypedArray())
+        putString("country", deviceConfig.deviceCountry.get())
+        putString("primary", deviceConfig.getPrimaryLanguage())
+        putStringArray("extras", extraCountries().map { it.code }.toTypedArray())
+    }
+
+    private suspend fun extraCountries(): List<ShardsRepository.ShardCountry> {
+        val primary = ShardsRepository.ShardCountry.forCode(deviceConfig.getPrimaryLanguage())
+        return deviceConfig.getExtraLanguages().map { ShardsRepository.ShardCountry.forCode(it) }
+            .filterNot { it == primary }
+    }
+
+    /** AMM's extra country picker logic: at most two, never the primary one */
+    private suspend fun setExtraCountries(codes: List<String>): Bundle {
+        val primary = ShardsRepository.ShardCountry.forCode(deviceConfig.getPrimaryLanguage())
+        val countries = codes.map { ShardsRepository.ShardCountry.forCode(it) }
+            .filterNot { it == primary }.distinct()
+        if (countries.size > MAX_EXTRA_COUNTRIES) {
+            return Bundle().apply { putBoolean("tooMany", true) }
+        }
+        deviceConfig.extraLanguages.set(countries.joinToString(",") { it.code })
+        deviceConfig.extraLanguageLimit.set(countries.size)
+        //Trigger a primary change to force a reload of Now Playing shards (as AMM)
+        deviceConfig.deviceCountry.notifyChange()
+        notifyChanged()
+        return Bundle()
+    }
 
     /** The installed database (AMM's Updates screen), without asking the network */
     private suspend fun getDatabase(): Bundle = Bundle().apply {
