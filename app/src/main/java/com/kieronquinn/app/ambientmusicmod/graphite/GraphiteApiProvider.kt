@@ -368,6 +368,7 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
         runCatching { shards.getCurrentDownloads().first() }.getOrNull()?.let { putInt("downloads", it) }
         val state = runCatching { shards.getShardsState(false).first() }.getOrNull() ?: return@apply
         putInt("version", state.local.versionCode)
+        putBoolean("installed", GraphiteDatabaseUpdater.isInstalled(state.local.versionCode))
         putString("date", state.local.date.toLocalDate().toString())
         putInt("tracks", state.local.trackCount)
         putInt("personalisedTracks", state.local.personalisedTrackCount)

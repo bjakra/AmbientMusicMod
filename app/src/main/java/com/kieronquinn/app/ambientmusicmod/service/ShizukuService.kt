@@ -370,8 +370,15 @@ class ShizukuService: IShellProxy.Stub() {
                     callback.onMicrophoneDisabledStateChanged(enabled)
                 }
             }
+            // Graphite: SystemUI's sensor privacy service lets Now Playing observe the toggle (patch 0550).
+            // Without that, assume the microphone is available instead of crashing the service.
+            try {
+                sensorPrivacyManager.addSensorPrivacyListener(Sensors.MICROPHONE, systemCallback)
+            } catch (e: SecurityException) {
+                android.util.Log.w("ShizukuService", "Can't observe the microphone toggle", e)
+                return@runWithClearedIdentity null
+            }
             sensorPrivacyListeners[id] = systemCallback
-            sensorPrivacyManager.addSensorPrivacyListener(Sensors.MICROPHONE, systemCallback)
             id
         }
     }
@@ -389,7 +396,12 @@ class ShizukuService: IShellProxy.Stub() {
     override fun isMicrophoneDisabled(): Boolean {
         if(Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
         return runWithClearedIdentity {
-            (sensorPrivacyManager.isSensorPrivacyEnabled(Sensors.MICROPHONE))
+            // Graphite: see addMicrophoneDisabledListener
+            try {
+                sensorPrivacyManager.isSensorPrivacyEnabled(Sensors.MICROPHONE)
+            } catch (e: SecurityException) {
+                false
+            }
         }
     }
 

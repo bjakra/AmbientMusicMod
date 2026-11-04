@@ -21,6 +21,11 @@ fun Context.createNotification(
             description = getString(channel.descRes)
         }
     notificationManager.createNotificationChannel(notificationChannel)
+    if (channel == NotificationChannel.FOREGROUND_SERVICE) {
+        // Graphite: AMM's visible "running in the background" channel, replaced by a hidden one.
+        // Android refuses while a foreground service still uses it; then it goes next time.
+        runCatching { notificationManager.deleteNotificationChannel(LEGACY_FOREGROUND_SERVICE_CHANNEL) }
+    }
     return NotificationCompat.Builder(this, channel.id).apply(builder).build()
 }
 
@@ -30,9 +35,15 @@ enum class NotificationChannel(
     val titleRes: Int,
     val descRes: Int
 ) {
+    /**
+     * Graphite: Now Playing runs as a system service and is turned on and off in Graphite settings, so
+     * its foreground service notification is hidden: the channel is created blocked (importance
+     * none). The service keeps running; Android just shows nothing for it, and SystemUI doesn't list
+     * it under active apps (patch 0460).
+     */
     FOREGROUND_SERVICE (
-        "foreground_service",
-        NotificationManager.IMPORTANCE_LOW,
+        "graphite_background_service",
+        NotificationManager.IMPORTANCE_NONE,
         R.string.notification_channel_service_foreground_title,
         R.string.notification_channel_service_foreground_subtitle
     ),
@@ -61,6 +72,8 @@ enum class NotificationChannel(
         R.string.notification_channel_backups_subtitle
     )
 }
+
+private const val LEGACY_FOREGROUND_SERVICE_CHANNEL = "foreground_service"
 
 enum class NotificationId {
     BUFFER, //Foreground ID cannot be 0
