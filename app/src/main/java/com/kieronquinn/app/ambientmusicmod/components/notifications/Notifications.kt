@@ -70,6 +70,12 @@ enum class NotificationChannel(
         NotificationManager.IMPORTANCE_DEFAULT,
         R.string.notification_channel_backups_title,
         R.string.notification_channel_backups_subtitle
+    ),
+    DATABASE_DOWNLOAD (
+        "database_download",
+        NotificationManager.IMPORTANCE_DEFAULT,
+        R.string.notification_channel_database_download_title,
+        R.string.notification_channel_database_download_subtitle
     )
 }
 
@@ -81,5 +87,6 @@ enum class NotificationId {
     UPDATES,
     ERRORS,
     WARNINGS,
-    BACKUP
+    BACKUP,
+    DATABASE_DOWNLOAD
 }

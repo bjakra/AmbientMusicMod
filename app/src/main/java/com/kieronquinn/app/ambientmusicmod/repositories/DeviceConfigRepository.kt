@@ -74,7 +74,11 @@ class DeviceConfigRepositoryImpl(
         private const val DEFAULT_DEVICE_COUNTRY = "" //Empty = automatic
 
         private const val EXTRA_LANGUAGE_LIMIT = "NowPlaying__ambient_music_extra_language_limit"
-        private const val DEFAULT_EXTRA_LANGUAGE_LIMIT = 0
+        //Graphite: not AMM's 0. The engine reads this once when it starts and ignores extra countries while
+        //it's 0, so countries chosen later were never downloaded. What counts is the list of countries.
+        //Each one is about 230 MB and adds to the matching time
+        const val MAX_EXTRA_LANGUAGES = 4
+        private const val DEFAULT_EXTRA_LANGUAGE_LIMIT = MAX_EXTRA_LANGUAGES
 
         private const val HISTORY_SUMMARY_DAYS = "NowPlaying__history_summary_num_days"
         private const val DEFAULT_HISTORY_SUMMARY_DAYS = 30
@@ -97,7 +101,8 @@ class DeviceConfigRepositoryImpl(
 
         //Custom, split into list used for extra languages when EXTRA_LANGUAGE_LIMIT is set > 0
         private const val EXTRA_LANGUAGES = "NowPlaying__ambient_music_extra_languages"
-        private const val EXTRA_LANGUAGES_DEFAULT = ""
+        //Graphite: US songs by default, the largest catalogue of international releases
+        private const val EXTRA_LANGUAGES_DEFAULT = "us"
 
         private val KEY_MAP = mapOf(
             CACHE_SHARD_ENABLED to DeviceConfigRepositoryImpl::cacheShardEnabled,

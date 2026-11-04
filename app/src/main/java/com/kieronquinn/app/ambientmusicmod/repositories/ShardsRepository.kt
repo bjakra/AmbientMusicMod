@@ -42,6 +42,15 @@ interface ShardsRepository {
 
     suspend fun isUpdateAvailable(clearCache: Boolean = false): Boolean
     fun getCurrentDownloads(): Flow<Int>
+
+    /**
+     * Graphite: the database version whose songs are really on the phone for all selected countries, or
+     * null. [getShardsState]'s local version only says which one was asked for.
+     */
+    suspend fun getInstalledVersion(): Int?
+
+    /** Graphite: how many bytes of the songs still have to be downloaded */
+    suspend fun getPendingDownloadBytes(): Long
     fun getShardsState(clearCache: Boolean = false): Flow<ShardsState>
 
     enum class ShardDownloadState {
@@ -179,6 +188,30 @@ class ShardsRepositoryImpl(
         }
     }.flowOn(Dispatchers.IO)
 
+    override suspend fun getPendingDownloadBytes(): Long = withContext(Dispatchers.IO) {
+        val uri = Uri.Builder().scheme(SCHEME).authority(AUTHORITY).path("pendingbytes").build()
+        val cursor = contentResolver.safeQuery(uri, null, null, null, null)
+            ?: return@withContext 0L
+        (cursor.map { it.getLong(0) }.firstOrNull() ?: 0L).also { cursor.close() }
+    }
+
+    override suspend fun getInstalledVersion(): Int? = withContext(Dispatchers.IO) {
+        val uri = Uri.Builder().scheme(SCHEME).authority(AUTHORITY).path("installed").build()
+        val cursor = contentResolver.safeQuery(uri, null, null, null, null)
+            ?: return@withContext null
+        val installed = cursor.map { it.getString(0) }.firstOrNull().orEmpty()
+        cursor.close()
+        val version = installed.substringBefore(';').toIntOrNull() ?: return@withContext null
+        val packs = installed.substringAfter(';')
+        val countries = getShardsState(false).first().local.selectedCountries
+        // Each pack is listed as "<superpack>:<country code + hash>;<version>"
+        version.takeIf {
+            countries.all { country ->
+                country.codes().any { code -> packs.contains(":${code.uppercase()}") }
+            }
+        }
+    }
+
     override suspend fun isUpdateAvailable(clearCache: Boolean): Boolean = withContext(Dispatchers.IO) {
         val localShard = deviceConfigRepository.indexManifest.get().getUrlData()
         val remoteShard = getRemoteShards(clearCache).first()
@@ -286,9 +319,17 @@ class ShardsRepositoryImpl(
      */
     private fun fetchManifestViaMusicDb(): ShardManifest? {
         val file = if (isArmv7) "release.json" else "release_v3.json"
-        val body = context.contentResolver.call(
-            android.net.Uri.parse("content://org.graphite.musicdb.manifest"), "fetch", file, null
-        )?.getString("body") ?: return null
+        // Unstable: an update's network grant restarts the downloader, and Android would kill this app
+        // along with it if a call were running on a normal connection
+        val client = context.contentResolver
+            .acquireUnstableContentProviderClient("org.graphite.musicdb.manifest") ?: return null
+        val body = try {
+            client.call("fetch", file, null)?.getString("body")
+        } catch (e: android.os.RemoteException) {
+            null
+        } finally {
+            client.close()
+        } ?: return null
         return gson.fromJson(body, ShardManifest::class.java)
     }
 

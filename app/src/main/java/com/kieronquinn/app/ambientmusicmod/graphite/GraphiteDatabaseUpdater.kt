@@ -1,10 +1,17 @@
 package com.kieronquinn.app.ambientmusicmod.graphite
 
+import android.app.Notification
+import android.app.NotificationManager
 import android.content.Context
+import android.os.Build
 import android.os.Process
 import android.os.UserHandle
 import android.provider.Settings
+import android.text.format.Formatter
 import android.util.Log
+import com.kieronquinn.app.ambientmusicmod.R
+import com.kieronquinn.app.ambientmusicmod.components.notifications.NotificationChannel
+import com.kieronquinn.app.ambientmusicmod.components.notifications.NotificationId
 import com.kieronquinn.app.ambientmusicmod.repositories.DeviceConfigRepository
 import com.kieronquinn.app.ambientmusicmod.repositories.JobsRepository
 import com.kieronquinn.app.ambientmusicmod.repositories.ShardsRepository
@@ -18,6 +25,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import android.app.NotificationChannel as AndroidNotificationChannel
 
 /**
  *  Graphite: music database updates. In AMM this app had network itself; here only the downloader
@@ -28,7 +36,8 @@ import org.koin.core.component.inject
  *  2. the same steps as AMM: fetch the newest database list, and if newer, switch the engine to it
  *     (DeviceConfigRepository.indexManifest), which makes the engine download it,
  *  3. run the engine's download jobs now (forced for "Update now", with the user's Wi-Fi/charging
- *     conditions for scheduled updates), wait until its download queue is empty or the window ends,
+ *     conditions for scheduled updates), wait until the engine reports the songs as installed or the
+ *     window ends,
  *  4. close the window: network permission revoked, window cleared.
  */
 object GraphiteDatabaseUpdater : KoinComponent {
@@ -41,8 +50,8 @@ object GraphiteDatabaseUpdater : KoinComponent {
 
     private const val MANUAL_WINDOW = 60 * 60 * 1000L
     private const val SCHEDULED_WINDOW = 6 * 60 * 60 * 1000L
-    /** Time for the engine to queue its downloads after the jobs are expedited */
-    private const val DOWNLOAD_QUEUE_SETTLE = 30 * 1000L
+    private const val PROGRESS_POLL = 3 * 1000L
+    private const val EXPEDITE_EVERY_POLLS = 5
 
     private val context by inject<Context>()
     private val shards by inject<ShardsRepository>()
@@ -59,15 +68,11 @@ object GraphiteDatabaseUpdater : KoinComponent {
     /** The automatic update schedule */
     fun scheduledUpdate() = scope.launch { run(force = false, window = SCHEDULED_WINDOW) }
 
-    private const val KEY_INSTALLED_VERSION = "installed_version"
-
-    private fun prefs() = context.getSharedPreferences("graphite_database", Context.MODE_PRIVATE)
-
     /**
-     * True when an update finished downloading the current database version. A new install, or an
-     * update that ended before the downloads finished, leaves the engine without songs to match.
+     * True when the songs of this database version are on the phone. A new install, or an update that
+     * ended before the downloads finished, leaves the engine with only its small built-in song set.
      */
-    fun isInstalled(versionCode: Int) = prefs().getInt(KEY_INSTALLED_VERSION, -1) == versionCode
+    suspend fun isInstalled(versionCode: Int) = shards.getInstalledVersion() == versionCode
 
     /** Makes sure the downloader has no network when no update runs (called at start) */
     fun closeWindow() {
@@ -96,28 +101,25 @@ object GraphiteDatabaseUpdater : KoinComponent {
             if (target != null) {
                 deviceConfig.indexManifest.set(target.url)
             }
-            if (force) jobs.forceExpediteJobs() else jobs.setShouldExpediteJobs(true)
+            val version = target?.versionCode ?: state.local.versionCode
+            if (!force) jobs.setShouldExpediteJobs(true)
             withTimeoutOrNull(window) {
-                if (target != null) {
-                    // The engine first has to switch to the new version
-                    while (shards.getShardsState(false).first().local.versionCode != target.versionCode) {
-                        delay(10_000)
+                // The engine adds a download job per step (database list, then the songs), so a forced
+                // update has to expedite again until everything is on the phone
+                var polls = 0
+                var total = 0L
+                while (shards.getInstalledVersion() != version) {
+                    if (polls++ % EXPEDITE_EVERY_POLLS == 0) {
+                        // Right after switching on, or after changing countries, the engine may have nothing
+                        // queued. A change of its country makes it look at what it needs again.
+                        if (shards.getCurrentDownloads().first() == 0) deviceConfig.deviceCountry.notifyChange()
+                        if (force) jobs.forceExpediteJobs()
                     }
+                    val remaining = shards.getPendingDownloadBytes()
+                    total = maxOf(total, remaining)
+                    showProgress(total, remaining)
+                    delay(PROGRESS_POLL)
                 }
-                // Done when the engine's download queue is empty again. It always keeps one charging+idle
-                // manifest recheck queued, so "empty" means at most one entry. The version alone isn't
-                // enough: when it's already current (a new install starts with the newest list), the
-                // songs themselves still have to download, which only the queue shows.
-                delay(DOWNLOAD_QUEUE_SETTLE)
-                var idlePolls = 0
-                while (idlePolls < 2) {
-                    val queued = shards.getCurrentDownloads().first()
-                    idlePolls = if (queued <= 1) idlePolls + 1 else 0
-                    delay(10_000)
-                }
-                // The songs of this version are on the phone now
-                prefs().edit().putInt(KEY_INSTALLED_VERSION,
-                    shards.getShardsState(false).first().local.versionCode).apply()
             } ?: Log.w(TAG, "Update window ended before the downloads finished")
         } catch (e: Exception) {
             Log.e(TAG, "Database update failed", e)
@@ -125,11 +127,54 @@ object GraphiteDatabaseUpdater : KoinComponent {
             if (!force) jobs.setShouldExpediteJobs(false)
             // Let the last download job hand over its files before the network goes away
             delay(5_000)
+            notificationManager().cancel(NotificationId.DATABASE_DOWNLOAD.ordinal)
             closeWindow()
             keepAlive?.close()
             running.value = false
             notifyApi()
         }
+    }
+
+    private fun notificationManager() = context.getSystemService(NotificationManager::class.java)
+
+    /** A Live Update: the progress is on the lock screen and in a status bar chip while songs download */
+    private fun showProgress(total: Long, remaining: Long) {
+        val channel = NotificationChannel.DATABASE_DOWNLOAD
+        notificationManager().createNotificationChannel(
+            AndroidNotificationChannel(channel.id, context.getString(channel.titleRes), channel.importance).apply {
+                description = context.getString(channel.descRes)
+                setSound(null, null)
+            }
+        )
+        val percent = if (total > 0) ((total - remaining) * 100 / total).toInt() else 0
+        val builder = Notification.Builder(context, channel.id)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(context.getString(R.string.notification_database_download_title))
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+        if (remaining > 0) {
+            builder.setContentText(context.getString(
+                R.string.notification_database_download_progress,
+                Formatter.formatShortFileSize(context, remaining),
+                Formatter.formatShortFileSize(context, total)
+            ))
+        } else {
+            builder.setContentText(context.getString(R.string.notification_database_download_preparing))
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+            // API level 36.1, which this app's build tools can't compile against
+            runCatching {
+                builder.javaClass.getMethod("setRequestPromotedOngoing", Boolean::class.javaPrimitiveType)
+                    .invoke(builder, true)
+            }
+            if (remaining > 0) builder.setShortCriticalText("$percent%")
+            builder.setStyle(
+                Notification.ProgressStyle().setProgress(percent).setProgressIndeterminate(remaining == 0L)
+            )
+        } else {
+            builder.setProgress(100, percent, remaining == 0L)
+        }
+        notificationManager().notify(NotificationId.DATABASE_DOWNLOAD.ordinal, builder.build())
     }
 
     private fun setDownloaderNetwork(allowed: Boolean) {

@@ -5,8 +5,10 @@ import android.content.ContentValues
 import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
+import com.kieronquinn.app.ambientmusicmod.model.settings.BannerMessage
 import com.kieronquinn.app.ambientmusicmod.repositories.BaseSettingsRepository.AmbientMusicModSetting
 import com.kieronquinn.app.ambientmusicmod.repositories.DeviceConfigRepository
+import com.kieronquinn.app.ambientmusicmod.repositories.DeviceConfigRepositoryImpl
 import com.kieronquinn.app.ambientmusicmod.repositories.RecognitionRepository
 import com.kieronquinn.app.ambientmusicmod.repositories.RecognitionRepository.RecognitionState
 import com.kieronquinn.app.ambientmusicmod.repositories.WidgetRepository
@@ -53,7 +55,7 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
         const val METHOD_SET_COUNTRY = "setCountry"
         const val METHOD_SET_EXTRA_COUNTRIES = "setExtraCountries"
         /** AMM's MAX_EXTRA_LANGUAGE_LIMIT */
-        private const val MAX_EXTRA_COUNTRIES = 2
+        private const val MAX_EXTRA_COUNTRIES = DeviceConfigRepositoryImpl.MAX_EXTRA_LANGUAGES
         const val METHOD_RECOGNISE = "recognise"
         const val METHOD_CANCEL_RECOGNITION = "cancelRecognition"
         const val METHOD_GET_RECOGNITION = "getRecognition"
@@ -115,9 +117,6 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
             "extraLanguages" to deviceConfig.extraLanguages,
             "showAlbumArt" to deviceConfig.showAlbumArt,
             "historySummaryDays" to deviceConfig.historySummaryDays,
-            "recordingGain" to deviceConfig.recordingGain,
-            "alternativeEncoding" to deviceConfig.alternativeEncoding,
-            "runOnSmallCores" to deviceConfig.runOnSmallCores,
             "cacheShardEnabled" to deviceConfig.cacheShardEnabled,
             "enableLogging" to deviceConfig.enableLogging
         )
@@ -156,7 +155,9 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
                 null
             }
             METHOD_SET_EXTRA_COUNTRIES ->
-                setExtraCountries(extras?.getStringArray(KEY_VALUE)?.filterNotNull().orEmpty())
+                setExtraCountries(
+                    extras?.getStringArray(KEY_VALUE)?.filterNotNull() ?: arg?.split(' ').orEmpty()
+                )
             METHOD_GET_DATABASE -> getDatabase()
             METHOD_RECOGNISE -> { startRecognition(); null }
             METHOD_CANCEL_RECOGNITION -> { recognitionJob?.cancel(); null }
@@ -233,6 +234,7 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
                 putBoolean("mainEnabled", state.mainEnabled)
                 putBoolean("notificationsEnabled", state.notificationsEnabled)
                 putString("banner", state.bannerMessage?.javaClass?.simpleName)
+                putBoolean("microphoneDisabled", state.bannerMessage is BannerMessage.MicrophoneDisabled)
                 state.lastRecognisedSong?.let {
                     putString("lastTrack", it.track)
                     putString("lastArtist", it.artist)
@@ -260,12 +262,13 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
             ShardsRepository.ShardCountry.forCode(deviceConfig.getPrimaryLanguage()).code
         }.getOrDefault(deviceConfig.getPrimaryLanguage()))
         putStringArray("extras", extraCountries().map { it.code }.toTypedArray())
+        putInt("maxExtras", MAX_EXTRA_COUNTRIES)
     }
 
     private suspend fun extraCountries(): List<ShardsRepository.ShardCountry> {
         val primary = ShardsRepository.ShardCountry.forCode(deviceConfig.getPrimaryLanguage())
         return deviceConfig.getExtraLanguages().map { ShardsRepository.ShardCountry.forCode(it) }
-            .filterNot { it == primary }
+            .filterNot { it == primary }.distinct()
     }
 
     /** AMM's extra country picker logic: at most two, never the primary one */
@@ -276,8 +279,9 @@ class GraphiteApiProvider : ContentProvider(), KoinComponent {
         if (countries.size > MAX_EXTRA_COUNTRIES) {
             return Bundle().apply { putBoolean("tooMany", true) }
         }
-        deviceConfig.extraLanguages.set(countries.joinToString(",") { it.code })
-        deviceConfig.extraLanguageLimit.set(countries.size)
+        // One code each: the list is split at commas, and "us,xa" has no shards of its own under xa
+        deviceConfig.extraLanguages.set(countries.joinToString(",") { it.code.substringBefore(',') })
+        deviceConfig.extraLanguageLimit.set(MAX_EXTRA_COUNTRIES)
         //Trigger a primary change to force a reload of Now Playing shards (as AMM)
         deviceConfig.deviceCountry.notifyChange()
         notifyChanged()
