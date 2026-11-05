@@ -32,7 +32,10 @@
     <string name="notification_channel_database_download_subtitle">Progress while the song database downloads</string>
     <string name="notification_database_download_title">Downloading songs</string>
     <string name="notification_database_download_preparing">Preparing the download</string>
-    <string name="notification_database_download_progress">%1$s of %2$s left</string>
+    <string name="notification_database_download_installing">Installing the songs</string>
+    <string name="notification_database_download_progress">%1$s of %2$s</string>
+    <string name="notification_database_download_waiting_wifi">Waiting for Wi-Fi</string>
+    <string name="notification_database_download_waiting_charging">Waiting for a charger</string>
     <string name="notification_channel_updates_title">Updates</string>
     <string name="notification_channel_updates_subtitle">Notifications shown when an update is available for the mod, app or database</string>
     <string name="notification_update_title">@string/app_name</string>

@@ -51,6 +51,13 @@ interface ShardsRepository {
 
     /** Graphite: how many bytes of the songs still have to be downloaded */
     suspend fun getPendingDownloadBytes(): Long
+
+    /** Graphite: the database version the engine is set to, without counting its songs like [getShardsState] */
+    suspend fun getLocalVersion(): Int
+
+    /** Graphite: the newest database if it's newer than [getLocalVersion], fetched from the network */
+    suspend fun getUpdateTarget(): RemoteShardsState?
+
     fun getShardsState(clearCache: Boolean = false): Flow<ShardsState>
 
     enum class ShardDownloadState {
@@ -203,13 +210,22 @@ class ShardsRepositoryImpl(
         cursor.close()
         val version = installed.substringBefore(';').toIntOrNull() ?: return@withContext null
         val packs = installed.substringAfter(';')
-        val countries = getShardsState(false).first().local.selectedCountries
+        // Not from getShardsState, which also counts all songs: that takes half a minute with several countries
+        val countries = listOf(getPrimaryCountry()) + getExtraCountries()
         // Each pack is listed as "<superpack>:<country code + hash>;<version>"
         version.takeIf {
             countries.all { country ->
                 country.codes().any { code -> packs.contains(":${code.uppercase()}") }
             }
         }
+    }
+
+    override suspend fun getLocalVersion(): Int = withContext(Dispatchers.IO) {
+        deviceConfigRepository.indexManifest.get().getUrlData().first
+    }
+
+    override suspend fun getUpdateTarget(): RemoteShardsState? = withContext(Dispatchers.IO) {
+        getRemoteShards(true).first()?.takeIf { it.versionCode != getLocalVersion() }
     }
 
     override suspend fun isUpdateAvailable(clearCache: Boolean): Boolean = withContext(Dispatchers.IO) {
